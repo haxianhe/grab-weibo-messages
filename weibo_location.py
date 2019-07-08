@@ -474,7 +474,7 @@ def main():
     try:
         file_name = '地标URL.csv'  # 该目录下地标URL文件名称
         filter = 1  # 值为0表示爬取全部微博（原创微博+转发微博），值为1表示只爬取原创微博
-        pic_download = 1  # 值为0代表不下载微博原始图片,1代表下载微博原始图片
+        pic_download = 0  # 值为0代表不下载微博原始图片,1代表下载微博原始图片
         wb = Weibo(file_name, filter, pic_download)
         wb.start()
     except Exception as e:
