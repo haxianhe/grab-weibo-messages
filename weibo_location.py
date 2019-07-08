@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 
 class Weibo(object):
-    def __init__(self, user_id, filter=0, pic_download=0):
+    def __init__(self, file_name, filter=0, pic_download=0):
         """Weibo类初始化"""
         # if not isinstance(user_id, int):
         #     sys.exit(u'user_id值应为一串数字形式,请重新输入')
@@ -27,12 +27,15 @@ class Weibo(object):
             sys.exit(u'filter值应为数字0或1,请重新输入')
         if pic_download != 0 and pic_download != 1:
             sys.exit(u'pic_download值应为数字0或1,请重新输入')
-        self.user_id = user_id  # 用户id,即需要我们输入的数字,如昵称为"Dear-迪丽热巴"的id为1669879400
+        # self.user_id = user_id  # 用户id,即需要我们输入的数字,如昵称为"Dear-迪丽热巴"的id为1669879400
+        self.containerid = ''
+        self.file_name = file_name
         self.filter = filter  # 取值范围为0、1,程序默认值为0,代表要爬取用户的全部微博,1代表只爬取用户的原创微博
         self.pic_download = pic_download  # 取值范围为0、1,程序默认值为0,代表不下载微博原始图片,1代表下载
         self.weibo = []  # 存储爬取到的所有微博信息
         self.user = {}  # 存储目标微博用户信息
         self.got_count = 0  # 爬取到的微博数
+        self.url = [] ##所有待爬位置ID
 
     def get_json(self, params):
         """获取网页中json数据"""
@@ -43,13 +46,13 @@ class Weibo(object):
     def get_weibo_json(self, page):
         """获取网页中微博json数据"""
         # params = {'containerid': '107603' + str(self.user_id), 'page': page}
-        params = {'containerid': self.user_id, 'page': page}
+        params = {'containerid': self.containerid, 'page': page}
         js = self.get_json(params)
         return js
 
     def get_user_info(self):
         """获取用户信息"""
-        params = {'containerid': self.user_id}
+        params = {'containerid': self.containerid}
         js = self.get_json(params)
         if js['ok']:
             info = js['data']['pageInfo']
@@ -314,7 +317,11 @@ class Weibo(object):
 
     def get_page_count(self):
         """获取微博页数"""
-        weibo_count = self.user['total']
+        if 'total' in self.user:
+            weibo_count = self.user['total']
+        else:
+            weibo_count = 100
+            self.user['total'] = 100
         page_count = int(math.ceil(weibo_count / 10.0))
         return page_count
 
@@ -352,7 +359,7 @@ class Weibo(object):
                 os.makedirs(file_dir)
             if type == 'img':
                 return file_dir
-            file_path = file_dir + os.sep + '%s' % self.user_id + '.' + type
+            file_path = file_dir + os.sep + '%s' % self.containerid + '.' + type
             return file_path
         except Exception as e:
             print('Error: ', e)
@@ -399,37 +406,60 @@ class Weibo(object):
         if self.got_count > wrote_count:
             self.write_csv(wrote_count)
 
+    def clear_info(self):
+        self.containerid = ''
+        self.weibo = []  # 存储爬取到的所有微博信息
+        self.user = {}  # 存储目标微博用户信息
+        self.got_count = 0  # 爬取到的微博数
+
     def get_pages(self):
         """获取全部微博"""
-        self.get_user_info()
-        page_count = self.get_page_count()
-        wrote_count = 0
-        self.print_user_info();
-        page1 = 0
-        random_pages = random.randint(1, 5)
-        for page in tqdm(range(1, page_count + 1), desc=u"进度"):
-            print(u'第%d页' % page)
-            self.get_one_page(page)
-            # self.get_one_page(3)
+        for containerid in self.url:
+            self.clear_info()
+            self.containerid = containerid
+            self.get_user_info()
+            page_count = self.get_page_count()
+            wrote_count = 0
+            self.print_user_info();
+            page1 = 0
+            random_pages = random.randint(1, 5)
+            for page in tqdm(range(1, page_count + 1), desc=u"进度"):
+                print(u'第%d页' % page)
+                self.get_one_page(page)
+                # self.get_one_page(3)
 
-            if page % 20 == 0:  # 每爬20页写入一次文件
-                self.write_file(wrote_count)
-                wrote_count = self.got_count
+                if page % 1 == 0:  # 每爬20页写入一次文件
+                    self.write_file(wrote_count)
+                    wrote_count = self.got_count
 
-            # 通过加入随机等待避免被限制。爬虫速度过快容易被系统限制(一段时间后限
-            # 制会自动解除)，加入随机等待模拟人的操作，可降低被系统限制的风险。默
-            # 认是每爬取1到5页随机等待6到10秒，如果仍然被限，可适当增加sleep时间
-            if page - page1 == random_pages and page < page_count:
-                sleep(random.randint(6, 10))
-                page1 = page
-                random_pages = random.randint(1, 5)
+                # 通过加入随机等待避免被限制。爬虫速度过快容易被系统限制(一段时间后限
+                # 制会自动解除)，加入随机等待模拟人的操作，可降低被系统限制的风险。默
+                # 认是每爬取1到5页随机等待6到10秒，如果仍然被限，可适当增加sleep时间
+                if page - page1 == random_pages and page < page_count:
+                    sleep(random.randint(6, 10))
+                    page1 = page
+                    random_pages = random.randint(1, 5)
 
         self.write_file(wrote_count)  # 将剩余不足20页的微博写入文件
         print(u'微博爬取完成，共爬取%d条微博' % self.got_count)
 
+    def read_csv(self):
+        url = os.getcwd() + '/' + self.file_name;
+        with open(url, 'r') as f:
+            reader = csv.reader(f)
+            columns = [row[3] for row in reader]
+            columns.pop(0)
+            
+            url = []
+            for column in columns:
+                url.append(column.split('p/')[1].split('?')[0])
+
+            self.url = url
+
     def start(self):
         """运行爬虫"""
         try:
+            self.read_csv()
             self.get_pages()
             print(u'信息抓取完毕')
             print('*' * 100)
@@ -442,10 +472,10 @@ class Weibo(object):
 
 def main():
     try:
-        user_id = '100101B2094757D164A3FC499A'  # 可以改成任意合法的用户id
+        file_name = '地标URL.csv'  # 该目录下地标URL文件名称
         filter = 1  # 值为0表示爬取全部微博（原创微博+转发微博），值为1表示只爬取原创微博
         pic_download = 1  # 值为0代表不下载微博原始图片,1代表下载微博原始图片
-        wb = Weibo(user_id, filter, pic_download)
+        wb = Weibo(file_name, filter, pic_download)
         wb.start()
     except Exception as e:
         print('Error: ', e)
